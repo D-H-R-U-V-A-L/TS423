@@ -1,0 +1,307 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>Compliance Audit Report</h1>
+        <p class="subtitle">Read-only view of flagged transactions and leakage evidence for auditing.</p>
+    </div>
+    <div style="display:flex; align-items:center; gap:0.75rem;">
+        <!-- Audit badge — no action buttons -->
+        <div style="
+            background: rgba(139,92,246,0.15);
+            border: 1px solid rgba(139,92,246,0.35);
+            border-radius: 8px;
+            padding: 0.5rem 1rem;
+            font-size:0.8rem;
+            color:#c4b5fd;
+            font-weight:600;
+            display:flex; align-items:center; gap:0.5rem;
+        ">
+            <i class="ph ph-lock"></i> Read-Only Audit Access
+        </div>
+        <div id="report-timestamp" style="font-size:0.78rem; color:var(--text-muted);"></div>
+    </div>
+</div>
+
+<!-- ── Summary Stat Cards ────────────────────────────────────────────────── -->
+<div class="stats-row mt-1">
+    <div class="stat-card">
+        <div class="stat-label">Total Flagged</div>
+        <div class="stat-value" id="audit-total">—</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Critical Risk (≥90)</div>
+        <div class="stat-value text-danger" id="audit-critical">—</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Verified</div>
+        <div class="stat-value text-success" id="audit-verified">—</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Pending Review</div>
+        <div class="stat-value text-warning" id="audit-pending">—</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">False Positives</div>
+        <div class="stat-value text-muted" id="audit-false">—</div>
+    </div>
+</div>
+
+<!-- ── Pattern Distribution ──────────────────────────────────────────────── -->
+<div class="grid-layout mt-2">
+    <div class="card">
+        <h3>Leakage Type Distribution</h3>
+        <canvas id="audit-chart-type" style="max-height:240px;"></canvas>
+    </div>
+    <div class="card">
+        <h3>Alert Status Breakdown</h3>
+        <canvas id="audit-chart-status" style="max-height:240px;"></canvas>
+    </div>
+</div>
+
+<!-- ── Full Audit Trail Table ────────────────────────────────────────────── -->
+<div class="card mt-2">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:0.75rem;">
+        <h3 style="margin:0;">Full Alert Audit Trail</h3>
+        <div style="display:flex; gap:0.75rem; align-items:center;">
+            <!-- Filter -->
+            <select id="audit-filter" class="form-control" style="width:auto; font-size:0.8rem; padding:0.4rem 0.75rem;" onchange="filterAuditTable()">
+                <option value="">All Types</option>
+                <option value="DECEASED">Deceased</option>
+                <option value="DUPLICATE_IDENTITY">Duplicate Identity</option>
+                <option value="UNDRAWN_FUNDS">Undrawn Funds</option>
+                <option value="CROSS_SCHEME">Cross Scheme</option>
+            </select>
+            <!-- Export -->
+            <button class="btn" onclick="exportCSV()" style="font-size:0.8rem; padding:0.45rem 0.9rem;">
+                <i class="ph ph-download-simple"></i> Export CSV
+            </button>
+        </div>
+    </div>
+
+    <div class="table-container">
+        <table class="data-table" id="audit-table">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Alert ID</th>
+                    <th>Beneficiary</th>
+                    <th>District</th>
+                    <th>Leakage Type</th>
+                    <th>Risk Score</th>
+                    <th>Status</th>
+                    <th>Evidence</th>
+                    <th>Created</th>
+                </tr>
+            </thead>
+            <tbody id="audit-tbody">
+                <tr><td colspan="9" class="text-center p-3 text-muted">Loading audit data…</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% block scripts %}
+<script>
+let _allAlerts = [];
+
+async function loadAuditData() {
+    try {
+        const res = await fetch('/api/alerts');
+        if (!res.ok) {
+            document.getElementById('audit-tbody').innerHTML =
+                '<tr><td colspan="9" class="text-center p-3 text-muted">No alert data. Ask State Admin to run the detection engine first.</td></tr>';
+            return;
+        }
+        const alerts = await res.json();
+        _allAlerts = alerts;
+
+        // Stats
+        const total    = alerts.length;
+        const critical = alerts.filter(a => a.risk_score >= 90).length;
+        const verified = alerts.filter(a => a.status === 'VERIFIED').length;
+        const pending  = alerts.filter(a => a.status === 'PENDING').length;
+        const fp       = alerts.filter(a => a.status === 'FALSE_POSITIVE').length;
+
+        document.getElementById('audit-total').innerText    = total;
+        document.getElementById('audit-critical').innerText = critical;
+        document.getElementById('audit-verified').innerText = verified;
+        document.getElementById('audit-pending').innerText  = pending;
+        document.getElementById('audit-false').innerText    = fp;
+        document.getElementById('report-timestamp').innerText =
+            'Report generated: ' + new Date().toLocaleString();
+
+        renderTable(alerts);
+        renderAuditCharts(alerts);
+
+    } catch(e) { console.error(e); }
+}
+
+function renderTable(alerts) {
+    const tbody = document.getElementById('audit-tbody');
+    tbody.innerHTML = '';
+
+    if (!alerts.length) {
+        tbody.innerHTML = '<tr><td colspan="9" class="text-center p-3 text-muted">No alerts found.</td></tr>';
+        return;
+    }
+
+    alerts.forEach((a, idx) => {
+        const badgeClass = a.risk_score >= 90 ? 'badge-danger' : 'badge-warning';
+        let evidence = '—';
+        try {
+            const parsed = JSON.parse(a.evidence);
+            evidence = parsed.detail || evidence;
+        } catch(e) {}
+
+        const tr = document.createElement('tr');
+        tr.dataset.type = a.leakage_type;
+        tr.innerHTML = `
+            <td style="color:var(--text-muted); font-size:0.75rem;">${idx + 1}</td>
+            <td style="font-family:monospace; font-size:0.78rem;">#${a.id}</td>
+            <td>
+                <div style="font-weight:600; font-size:0.875rem;">${a.beneficiary_name}</div>
+                <div style="font-size:0.72rem; color:var(--text-muted);">#BEN-${a.beneficiary_id}</div>
+            </td>
+            <td>${a.district}</td>
+            <td>
+                <span style="
+                    background:${leakageColor(a.leakage_type)}22;
+                    color:${leakageColor(a.leakage_type)};
+                    border:1px solid ${leakageColor(a.leakage_type)}44;
+                    border-radius:6px; padding:0.2rem 0.5rem;
+                    font-size:0.72rem; font-weight:600;
+                ">${a.leakage_type.replace(/_/g,' ')}</span>
+            </td>
+            <td><span class="${badgeClass}">${a.risk_score}</span></td>
+            <td><span style="font-size:0.75rem; color:var(--text-muted);">${a.status}</span></td>
+            <td style="font-size:0.75rem; color:var(--text-muted); max-width:260px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${evidence}">${evidence}</td>
+            <td style="font-size:0.72rem; color:var(--text-muted);">${new Date(a.created_at).toLocaleDateString('en-IN')}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+// Accepts both raw DB keys (DECEASED) and title-cased API values (Deceased)
+function leakageColor(type) {
+    const MAP = {
+        DECEASED:           '#ef4444',
+        Deceased:           '#ef4444',
+        DUPLICATE_IDENTITY: '#f59e0b',
+        'Duplicate Identity':'#f59e0b',
+        UNDRAWN_FUNDS:      '#3b82f6',
+        'Undrawn Funds':    '#3b82f6',
+        CROSS_SCHEME:       '#8b5cf6',
+        'Cross Scheme':     '#8b5cf6',
+    };
+    return MAP[type] || '#94a3b8';
+}
+
+function filterAuditTable() {
+    const val = document.getElementById('audit-filter').value;
+    // Filter handles both raw and formatted leakage_type values
+    const filtered = val
+        ? _allAlerts.filter(a => a.leakage_type === val || a.leakage_type.replace(/ /g,'_').toUpperCase() === val)
+        : _allAlerts;
+    renderTable(filtered);
+}
+
+function renderAuditCharts(alerts) {
+    try {
+        const canvasType   = document.getElementById('audit-chart-type');
+        const canvasStatus = document.getElementById('audit-chart-status');
+        if (!canvasType || !canvasStatus) {
+            console.error('[audit] Chart canvases not found in DOM');
+            return;
+        }
+
+        // ── Leakage type doughnut ────────────────────────────────────────────
+        const typeCounts = {};
+        alerts.forEach(a => {
+            const key = a.leakage_type || 'Unknown';
+            typeCounts[key] = (typeCounts[key] || 0) + 1;
+        });
+        const typeKeys   = Object.keys(typeCounts);
+        const typeLabels = typeKeys.map(k => k.replace(/_/g,' '));
+        const typeData   = typeKeys.map(k => typeCounts[k]);
+        const typeColors = typeKeys.map(k => leakageColor(k));
+
+        if (window._auditChart1) window._auditChart1.destroy();
+        window._auditChart1 = new Chart(canvasType.getContext('2d'), {
+            type: 'doughnut',
+            data: {
+                labels: typeLabels,
+                datasets: [{ data: typeData, backgroundColor: typeColors, borderWidth: 0, hoverOffset: 6 }]
+            },
+            options: {
+                animation: { animateRotate: true, duration: 700 },
+                plugins: { legend: { labels: { color: '#f8fafc', font: { size: 11 } } } },
+                cutout: '60%'
+            }
+        });
+
+        // ── Status bar chart ─────────────────────────────────────────────────
+        // Match against both raw uppercase and title-cased values from API
+        const statusOrder  = ['PENDING', 'ASSIGNED', 'VERIFIED', 'FALSE_POSITIVE'];
+        const statusLabels = ['Pending', 'Assigned', 'Verified', 'False Positive'];
+        const statusColors = ['#f59e0b', '#3b82f6', '#10b981', '#6b7280'];
+        const statusData   = statusOrder.map(s =>
+            alerts.filter(a => {
+                const st = (a.status || '').toUpperCase().replace(/ /g,'_');
+                return st === s;
+            }).length
+        );
+
+        if (window._auditChart2) window._auditChart2.destroy();
+        window._auditChart2 = new Chart(canvasStatus.getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: statusLabels,
+                datasets: [{
+                    label: 'Alerts',
+                    data: statusData,
+                    backgroundColor: statusColors,
+                    borderRadius: 6
+                }]
+            },
+            options: {
+                animation: { duration: 700 },
+                scales: {
+                    y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                    x: { ticks: { color: '#94a3b8' }, grid: { display: false } }
+                },
+                plugins: { legend: { display: false } }
+            }
+        });
+
+        console.log('[audit] Charts rendered —', typeKeys, '| status totals:', statusData);
+    } catch(err) {
+        console.error('[audit] renderCharts error:', err);
+    }
+}
+
+function exportCSV() {
+    if (!_allAlerts.length) { alert('No data to export.'); return; }
+
+    const header = ['Alert ID','Beneficiary ID','Name','District','Leakage Type','Risk Score','Status','Created At'];
+    const rows = _allAlerts.map(a => [
+        a.id, a.beneficiary_id, `"${a.beneficiary_name}"`, a.district,
+        a.leakage_type, a.risk_score, a.status, a.created_at
+    ]);
+
+    const csv = [header, ...rows].map(r => r.join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url;
+    a.download = `dbt_audit_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+// Load on ready
+loadAuditData();
+</script>
+{% endblock %}
+{% endblock %}

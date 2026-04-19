@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DBT Sentinel | Leakage Detection System</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/index.css') }}">
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    {% block head %}{% endblock %}
+</head>
+<body>
+    <div class="layout">
+        <!-- ── Sidebar ───────────────────────────────────────────────────── -->
+        <aside class="sidebar">
+            <div class="brand">
+                <i class="ph-fill ph-shield-check text-accent"></i>
+                <h2>DBT Sentinel</h2>
+            </div>
+
+            <nav class="nav-menu">
+                <p class="nav-label">My Portal</p>
+
+                {# DFO sees only DFO dashboard #}
+                {% if current_user.role == 'dfo' %}
+                <a href="/" class="nav-item {% if request.path == '/' %}active{% endif %}">
+                    <i class="ph ph-squares-four"></i> DFO Dashboard
+                </a>
+
+                {# Verifier sees only Verifier portal #}
+                {% elif current_user.role == 'verifier' %}
+                <a href="/verifier" class="nav-item {% if request.path == '/verifier' %}active{% endif %}">
+                    <i class="ph ph-map-pin"></i> Field Verifier App
+                </a>
+
+                {# Admin / Audit see different portals #}
+                {% elif current_user.role == 'state_admin' %}
+                <a href="/heatmap" class="nav-item {% if request.path == '/heatmap' %}active{% endif %}">
+                    <i class="ph ph-map-trifold"></i> State Risk Heatmap
+                </a>
+
+                {% elif current_user.role == 'audit' %}
+                <a href="/audit" class="nav-item {% if request.path == '/audit' %}active{% endif %}">
+                    <i class="ph ph-clipboard-text"></i> Compliance Audit Report
+                </a>
+                {% endif %}
+            </nav>
+
+            <div class="user-profile">
+                <div class="avatar">{{ current_user.initials }}</div>
+                <div class="user-info">
+                    <span class="name">{{ current_user.full_name or current_user.username }}</span>
+                    <span class="role">{{ current_user.role | replace('_', ' ') | title }}</span>
+                </div>
+            </div>
+
+            <a href="/logout" class="logout-btn">
+                <i class="ph ph-sign-out"></i> Sign Out
+            </a>
+        </aside>
+
+        <!-- ── Main Content ──────────────────────────────────────────────── -->
+        <main class="main-content">
+            <header class="topbar">
+                <div class="search-bar">
+                    <i class="ph ph-magnifying-glass"></i>
+                    <input type="text" placeholder="Search by Aadhaar or Ben ID...">
+                </div>
+                <div class="actions">
+                    {# Only state_admin can run the engine #}
+                    {% if current_user.role in ['dfo', 'state_admin'] %}
+                    <button class="btn btn-primary" id="btn-run-engine">
+                        <i class="ph ph-play"></i> Run Detection Engine
+                    </button>
+                    {% endif %}
+                    <div class="notifications">
+                        <i class="ph ph-bell"></i>
+                        <span class="badge" id="alert-badge">0</span>
+                    </div>
+                </div>
+            </header>
+
+            <div class="content-wrapper">
+                {% block content %}{% endblock %}
+            </div>
+        </main>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

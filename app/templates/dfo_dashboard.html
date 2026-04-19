@@ -1,0 +1,976 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>Investigation Queue</h1>
+        <p class="subtitle">Prioritized potential leakage cases requiring attention.</p>
+    </div>
+    <div class="stats-row">
+        <div class="stat-card">
+            <div class="stat-label">Critical Risk (90-100)</div>
+            <div class="stat-value text-danger" id="stat-critical">0</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">High Risk (75-89)</div>
+            <div class="stat-value text-warning" id="stat-high">0</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Pending Verification</div>
+            <div class="stat-value text-info" id="stat-pending">0</div>
+        </div>
+    </div>
+</div>
+
+<div class="card mt-2">
+    <div class="table-container">
+        <table class="data-table" id="alerts-table">
+            <thead>
+                <tr>
+                    <th>Score</th>
+                    <th>Beneficiary ID</th>
+                    <th>Name</th>
+                    <th>District</th>
+                    <th>Leakage Type</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="alerts-tbody">
+                <!-- Data populated by JS -->
+                <tr><td colspan="7" class="text-center p-3 text-muted">No alerts found. Run detection engine first.</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- ── Gujarati Name Matcher Demo ──────────────────────────────────────────── -->
+<div class="card mt-2">
+    <div style="display:flex; align-items:center; gap:0.75rem; margin-bottom:1rem;">
+        <i class="ph ph-text-aa" style="font-size:1.5rem; color:var(--accent)"></i>
+        <div>
+            <h3 style="margin:0;">Gujarati Name Matcher</h3>
+            <p class="text-muted" style="font-size:0.8rem; margin:0;">
+                Test transliteration-aware similarity — not exact string match.
+            </p>
+        </div>
+    </div>
+
+    <div style="display:grid; grid-template-columns:1fr 1fr auto; gap:1rem; align-items:end;">
+        <div class="form-group" style="margin:0;">
+            <label>Name A</label>
+            <input type="text" class="form-control" id="nm-name-a" placeholder="e.g. Varun Thakkar">
+        </div>
+        <div class="form-group" style="margin:0;">
+            <label>Name B</label>
+            <input type="text" class="form-control" id="nm-name-b" placeholder="e.g. Warun Takkar">
+        </div>
+        <button class="btn btn-primary" onclick="runNameMatch()" style="height:44px;">
+            <i class="ph ph-magnifying-glass"></i> Match
+        </button>
+    </div>
+
+    <!-- Quick-fill pairs for demo -->
+    <div style="margin-top:0.75rem; display:flex; flex-wrap:wrap; gap:0.5rem;">
+        <span style="font-size:0.75rem; color:var(--text-muted); align-self:center;">Quick fill:</span>
+        <button class="qf-chip" onclick="fillPair('Ramesh Sharma','Rames Sarma')">Ramesh ↔ Rames</button>
+        <button class="qf-chip" onclick="fillPair('Bhavesh Patel','Bavesh Patel')">Bhavesh ↔ Bavesh</button>
+        <button class="qf-chip" onclick="fillPair('Varun Thakkar','Warun Takkar')">Varun ↔ Warun</button>
+        <button class="qf-chip" onclick="fillPair('Pooja Desai','Puja Desai')">Pooja ↔ Puja</button>
+        <button class="qf-chip" onclick="fillPair('Naik Mahendra','Nek Maendra')">Naik ↔ Nek</button>
+        <button class="qf-chip" onclick="fillPair('Dhruv Vora','Druv Wora')">Dhruv ↔ Druv</button>
+        <button class="qf-chip" onclick="fillPair('Ramesh Kumar','Suresh Kumar')">No match</button>
+    </div>
+
+    <div id="nm-result" style="margin-top:1rem; display:none;"></div>
+</div>
+
+<!-- assign modal -->
+<div class="modal" id="assign-modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Assign Investigator</h3>
+            <button class="close-btn" onclick="document.getElementById('assign-modal').classList.remove('active')">&times;</button>
+        </div>
+        <div class="modal-body">
+            <p>Select a field verifier for <span id="modal-ben-name" class="font-weight-bold"></span>.</p>
+            <div class="form-group mt-2">
+                <label>Available Verifiers in District</label>
+                <select class="form-control" id="verifier-select">
+                    <option>Ahmedabad_Field_01</option>
+                    <option>Surat_Field_02</option>
+                    <option>Rajkot_Field_01</option>
+                </select>
+            </div>
+            <br>
+            <p><strong>Evidence String: </strong></p>
+            <div class="evidence-box font-monospace text-xs" id="modal-evidence"></div>
+        </div>
+        <div class="modal-footer mt-2">
+            <button class="btn" onclick="document.getElementById('assign-modal').classList.remove('active')">Cancel</button>
+            <button class="btn btn-primary" onclick="assignCase()">Assign Case</button>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════════ -->
+<!-- CSV ANOMALY ANALYZER                                                       -->
+<!-- ══════════════════════════════════════════════════════════════════════════ -->
+<div class="card mt-2" id="csv-analyzer-card">
+    <div style="display:flex; align-items:center; gap:0.75rem; margin-bottom:1.25rem;">
+        <i class="ph ph-file-csv" style="font-size:1.6rem; color:var(--accent)"></i>
+        <div>
+            <h3 style="margin:0;">CSV Anomaly Analyzer</h3>
+            <p class="text-muted" style="font-size:0.8rem; margin:0;">
+                Upload your own beneficiary CSV — anomalies flagged instantly in-memory. No data saved.
+            </p>
+        </div>
+    </div>
+
+    <!-- Drop zone -->
+    <div id="csv-dropzone" class="csv-dropzone" onclick="document.getElementById('csv-file-input').click()">
+        <input type="file" id="csv-file-input" accept=".csv,.tsv,.txt" style="display:none" onchange="handleFileSelect(this.files[0])">
+        <div class="dz-idle" id="dz-idle">
+            <i class="ph ph-upload-simple dz-icon"></i>
+            <p class="dz-title">Drop your CSV here</p>
+            <p class="dz-hint">or click to browse &nbsp;·&nbsp; max 10 MB &nbsp;·&nbsp; .csv / .tsv</p>
+        </div>
+        <div class="dz-selected" id="dz-selected" style="display:none">
+            <i class="ph ph-file-text dz-icon" style="color:#10b981"></i>
+            <p class="dz-title" id="dz-filename">—</p>
+            <p class="dz-hint" id="dz-filesize">—</p>
+        </div>
+    </div>
+
+    <!-- Column detection preview -->
+    <div id="csv-col-preview" style="display:none; margin-top:1rem;">
+        <p style="font-size:0.78rem; font-weight:600; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:0.5rem;">
+            Auto-Detected Columns
+        </p>
+        <div id="csv-col-chips" style="display:flex; flex-wrap:wrap; gap:0.4rem;"></div>
+    </div>
+
+    <!-- Analyze button + progress -->
+    <div style="display:flex; align-items:center; gap:1rem; margin-top:1rem;">
+        <button class="btn btn-primary" id="csv-analyze-btn" onclick="runCsvAnalysis()" disabled>
+            <i class="ph ph-magnifying-glass"></i> Analyse File
+        </button>
+        <button class="btn" id="csv-clear-btn" onclick="clearCsvAnalyzer()" style="display:none">
+            <i class="ph ph-x"></i> Clear
+        </button>
+        <span id="csv-status" class="text-muted" style="font-size:0.82rem;"></span>
+    </div>
+
+    <!-- Progress bar -->
+    <div id="csv-progress-wrap" style="display:none; margin-top:0.75rem;">
+        <div class="csv-progress-track">
+            <div class="csv-progress-bar" id="csv-progress-bar"></div>
+        </div>
+        <p class="text-muted" style="font-size:0.75rem; margin-top:0.35rem;" id="csv-progress-label">Scanning…</p>
+    </div>
+
+    <!-- Summary ribbon -->
+    <div id="csv-summary-ribbon" style="display:none; margin-top:1.25rem;"></div>
+
+    <!-- Results table -->
+    <div id="csv-results-wrap" style="display:none; margin-top:1rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem; flex-wrap:wrap; gap:0.5rem;">
+            <p style="font-weight:600; font-size:0.9rem; margin:0;" id="csv-results-title"></p>
+            <div style="display:flex; gap:0.5rem; align-items:center;">
+                <button class="btn btn-primary" style="font-size:0.78rem; padding:0.35rem 0.85rem;" id="csv-import-all-btn" onclick="importAllToQueue()">
+                    <i class="ph ph-arrow-square-up"></i> Import All to Queue
+                </button>
+                <button class="btn" style="font-size:0.78rem; padding:0.35rem 0.85rem;" onclick="downloadCsvResults()">
+                    <i class="ph ph-download-simple"></i> Export Results
+                </button>
+            </div>
+        </div>
+
+        <!-- Filter chips -->
+        <div id="csv-filter-chips" style="display:flex; flex-wrap:wrap; gap:0.4rem; margin-bottom:0.75rem;"></div>
+
+        <div class="table-container">
+            <table class="data-table" id="csv-results-table">
+                <thead>
+                    <tr>
+                        <th>Row</th>
+                        <th>Name</th>
+                        <th>Aadhaar</th>
+                        <th>District</th>
+                        <th>Anomaly Type</th>
+                        <th>Risk Score</th>
+                        <th>Evidence</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="csv-results-tbody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Empty state after analysis -->
+    <div id="csv-empty-state" style="display:none; text-align:center; padding:2rem; color:var(--text-muted);">
+        <i class="ph ph-check-circle" style="font-size:2.5rem; color:#10b981; display:block; margin-bottom:0.5rem;"></i>
+        <p style="font-weight:600; font-size:1rem; margin:0;">No anomalies detected</p>
+        <p style="font-size:0.82rem; margin-top:0.25rem;">All rows in the uploaded file appear clean.</p>
+    </div>
+</div>
+
+{% block scripts %}
+<style>
+.qf-chip {
+    background: rgba(59,130,246,0.1);
+    border: 1px solid rgba(59,130,246,0.25);
+    border-radius: 999px;
+    padding: 0.25rem 0.75rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #93c5fd;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.qf-chip:hover { background: rgba(59,130,246,0.25); }
+.nm-card {
+    background: var(--surface-color);
+    border-radius: 10px;
+    padding: 1rem 1.25rem;
+    border: 1px solid var(--glass-border);
+}
+.nm-score-bar-wrap {
+    background: var(--surface-light);
+    border-radius: 999px;
+    height: 8px;
+    overflow: hidden;
+    margin: 0.5rem 0;
+}
+.nm-score-bar { height: 100%; border-radius:999px; transition: width 0.6s ease; }
+</style>
+
+<script>
+function fillPair(a, b) {
+    document.getElementById('nm-name-a').value = a;
+    document.getElementById('nm-name-b').value = b;
+    runNameMatch();
+}
+
+async function runNameMatch() {
+    const nameA = document.getElementById('nm-name-a').value.trim();
+    const nameB = document.getElementById('nm-name-b').value.trim();
+    const resultEl = document.getElementById('nm-result');
+
+    if (!nameA || !nameB) { alert('Please enter both names.'); return; }
+
+    resultEl.style.display = 'none';
+    resultEl.innerHTML = '<p class="text-muted">Computing…</p>';
+    resultEl.style.display = 'block';
+
+    try {
+        const res = await fetch('/api/name-match', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ name_a: nameA, name_b: nameB })
+        });
+        const d = await res.json();
+
+        const score = d.score;
+        let barColor = score >= 85 ? '#10b981' : score >= 70 ? '#f59e0b' : '#ef4444';
+        let verdictColor = score >= 85 ? 'text-success' : score >= 70 ? 'text-warning' : 'text-danger';
+
+        resultEl.innerHTML = `
+        <div class="nm-card">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
+                <span class="${verdictColor}" style="font-weight:700; font-size:0.95rem;">${d.verdict}</span>
+                <span style="font-size:1.5rem; font-weight:700; color:${barColor};">${score}/100</span>
+            </div>
+            <div class="nm-score-bar-wrap">
+                <div class="nm-score-bar" style="width:${score}%; background:${barColor};"></div>
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-top:1rem; font-size:0.82rem;">
+                <div>
+                    <div style="color:var(--text-muted); text-transform:uppercase; font-size:0.7rem; font-weight:600; margin-bottom:0.25rem;">Name A</div>
+                    <div style="font-weight:600;">${d.name_a}</div>
+                    <div style="color:var(--accent); font-family:monospace; margin-top:0.25rem;">→ "${d.normalized_a}"</div>
+                </div>
+                <div>
+                    <div style="color:var(--text-muted); text-transform:uppercase; font-size:0.7rem; font-weight:600; margin-bottom:0.25rem;">Name B</div>
+                    <div style="font-weight:600;">${d.name_b}</div>
+                    <div style="color:var(--accent); font-family:monospace; margin-top:0.25rem;">→ "${d.normalized_b}"</div>
+                </div>
+            </div>
+            ${d.exact_phonetic ? `<div style="margin-top:0.75rem; background:rgba(16,185,129,0.1); border:1px solid rgba(16,185,129,0.25); border-radius:8px; padding:0.5rem 0.75rem; font-size:0.8rem; color:#6ee7b7;">
+                <i class="ph ph-check-circle"></i> Both names normalise to the same Gujarati phonetic key — guaranteed same person.
+            </div>` : ''}
+        </div>`;
+    } catch(e) {
+        resultEl.innerHTML = '<p class="text-danger">Error calling API.</p>';
+    }
+}
+</script>
+
+<!-- ── CSV Analyzer styles ────────────────────────────────────────────────── -->
+<style>
+/* Drop zone ---------------------------------------------------------------- */
+.csv-dropzone {
+    border: 2px dashed rgba(99,102,241,0.4);
+    border-radius: 14px;
+    padding: 2rem 1.5rem;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.25s, background 0.25s;
+    background: rgba(99,102,241,0.03);
+    position: relative;
+}
+.csv-dropzone:hover,
+.csv-dropzone.dragover {
+    border-color: var(--accent);
+    background: rgba(99,102,241,0.08);
+}
+.dz-icon {
+    font-size: 2.2rem;
+    display: block;
+    margin-bottom: 0.5rem;
+    color: var(--accent);
+}
+.dz-title {
+    font-weight: 600;
+    font-size: 0.95rem;
+    margin: 0 0 0.25rem;
+}
+.dz-hint {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    margin: 0;
+}
+
+/* Column chips ------------------------------------------------------------- */
+.col-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    border-radius: 6px;
+    padding: 0.2rem 0.65rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    line-height: 1.6;
+}
+.col-chip.found {
+    background: rgba(16,185,129,0.12);
+    border: 1px solid rgba(16,185,129,0.3);
+    color: #6ee7b7;
+}
+.col-chip.missing {
+    background: rgba(148,163,184,0.07);
+    border: 1px solid rgba(148,163,184,0.18);
+    color: var(--text-muted);
+    text-decoration: line-through;
+}
+
+/* Progress bar ------------------------------------------------------------- */
+.csv-progress-track {
+    height: 6px;
+    background: var(--surface-light);
+    border-radius: 999px;
+    overflow: hidden;
+}
+.csv-progress-bar {
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #6366f1, #8b5cf6);
+    width: 0%;
+    transition: width 0.4s ease;
+    animation: shimmer 1.5s infinite linear;
+    background-size: 200% 100%;
+}
+@keyframes shimmer {
+    0%   { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+}
+
+/* Summary ribbon ----------------------------------------------------------- */
+.csv-ribbon {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+.csv-ribbon-stat {
+    flex: 1;
+    min-width: 120px;
+    background: var(--surface-color);
+    border: 1px solid var(--glass-border);
+    border-radius: 10px;
+    padding: 0.75rem 1rem;
+    text-align: center;
+}
+.csv-ribbon-stat .rv { font-size: 1.6rem; font-weight: 700; }
+.csv-ribbon-stat .rl { font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600; margin-top: 0.15rem; }
+
+/* Filter chips ------------------------------------------------------------- */
+.filter-chip {
+    border-radius: 999px;
+    padding: 0.25rem 0.8rem;
+    font-size: 0.73rem;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid;
+    transition: opacity 0.2s;
+}
+.filter-chip:not(.active) { opacity: 0.45; }
+.filter-chip.active { opacity: 1; }
+
+/* Risk badge --------------------------------------------------------------- */
+.risk-badge {
+    display: inline-block;
+    padding: 0.18rem 0.55rem;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 700;
+}
+</style>
+
+<!-- ── CSV Analyzer JavaScript ───────────────────────────────────────────── -->
+<script>
+// ── State ────────────────────────────────────────────────────────────────────
+let _csvFile       = null;
+let _csvResults    = null;   // last full API response
+let _activeFilter  = 'ALL';  // type filter
+
+// ── Colour maps ──────────────────────────────────────────────────────────────
+const TYPE_COLORS = {
+    'DECEASED':           { bg:'rgba(239,68,68,0.12)',  border:'rgba(239,68,68,0.35)',  text:'#fca5a5' },
+    'DUPLICATE_IDENTITY': { bg:'rgba(245,158,11,0.12)', border:'rgba(245,158,11,0.35)', text:'#fcd34d' },
+    'UNDRAWN_FUNDS':      { bg:'rgba(99,102,241,0.12)', border:'rgba(99,102,241,0.35)', text:'#a5b4fc' },
+    'CROSS_SCHEME':       { bg:'rgba(16,185,129,0.12)', border:'rgba(16,185,129,0.35)', text:'#6ee7b7' },
+};
+const TYPE_LABELS = {
+    'DECEASED':           'Deceased',
+    'DUPLICATE_IDENTITY': 'Duplicate Identity',
+    'UNDRAWN_FUNDS':      'Undrawn Funds',
+    'CROSS_SCHEME':       'Cross-Scheme',
+};
+
+function riskColor(score) {
+    if (score >= 90) return '#ef4444';
+    if (score >= 75) return '#f59e0b';
+    if (score >= 50) return '#6366f1';
+    return '#94a3b8';
+}
+
+// ── Drop-zone ────────────────────────────────────────────────────────────────
+(function initDropzone() {
+    const dz = document.getElementById('csv-dropzone');
+    dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('dragover'); });
+    dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
+    dz.addEventListener('drop', e => {
+        e.preventDefault();
+        dz.classList.remove('dragover');
+        const f = e.dataTransfer.files[0];
+        if (f) handleFileSelect(f);
+    });
+})();
+
+function handleFileSelect(file) {
+    if (!file) return;
+    _csvFile = file;
+
+    // Show selected state in drop zone
+    document.getElementById('dz-idle').style.display   = 'none';
+    document.getElementById('dz-selected').style.display = '';
+    document.getElementById('dz-filename').textContent = file.name;
+    document.getElementById('dz-filesize').textContent =
+        (file.size / 1024).toFixed(1) + ' KB  ·  Click to change';
+
+    // Enable analyse button
+    document.getElementById('csv-analyze-btn').disabled = false;
+    document.getElementById('csv-clear-btn').style.display = '';
+    document.getElementById('csv-status').textContent = '';
+
+    // Read header row to show column chips
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const text   = e.target.result;
+        const header = text.split('\n')[0];
+        const cols   = header.split(',').map(c => c.trim().replace(/^"|"$/g,''));
+        showColumnChips(cols);
+    };
+    reader.readAsText(file.slice(0, 4096)); // only need first chunk for header
+}
+
+function showColumnChips(cols) {
+    const aliases = {
+        'name':               ['name','beneficiary_name','full_name','naam','applicant_name','holder_name'],
+        'aadhaar':            ['aadhaar','aadhaar_number','aadhar','uid','aadhaar_no','aadhar_no'],
+        'bank_account_no':    ['bank_account_no','account_no','acc_no','account_number','bank_acc','bank_account'],
+        'death_date':         ['death_date','date_of_death','dod','death_dt'],
+        'last_withdrawal_date':['last_withdrawal_date','last_withdrawal','last_txn_date','last_transaction_date'],
+        'current_balance':    ['current_balance','balance','amount','account_balance','bal'],
+        'scheme_id':          ['scheme_id','scheme','scheme_name','scheme_code','program'],
+        'district':           ['district','taluka','block','mandal','zilla'],
+    };
+    const lowerCols = cols.map(c => c.toLowerCase());
+    const preview = document.getElementById('csv-col-preview');
+    const chips   = document.getElementById('csv-col-chips');
+    chips.innerHTML = '';
+    for (const [canonical, list] of Object.entries(aliases)) {
+        const found = list.find(a => lowerCols.includes(a));
+        const chip  = document.createElement('span');
+        chip.className = 'col-chip ' + (found ? 'found' : 'missing');
+        chip.innerHTML = (found ? '<i class="ph ph-check"></i>' : '<i class="ph ph-x"></i>') +
+                          canonical.replace(/_/g,' ');
+        if (found) chip.title = `Mapped from "${found}"`;
+        chips.appendChild(chip);
+    }
+    preview.style.display = '';
+}
+
+function clearCsvAnalyzer() {
+    _csvFile = null; _csvResults = null; _activeFilter = 'ALL';
+    document.getElementById('csv-file-input').value = '';
+    document.getElementById('dz-idle').style.display   = '';
+    document.getElementById('dz-selected').style.display = 'none';
+    document.getElementById('csv-analyze-btn').disabled = true;
+    document.getElementById('csv-clear-btn').style.display = 'none';
+    document.getElementById('csv-col-preview').style.display = 'none';
+    document.getElementById('csv-progress-wrap').style.display = 'none';
+    document.getElementById('csv-summary-ribbon').style.display = 'none';
+    document.getElementById('csv-results-wrap').style.display  = 'none';
+    document.getElementById('csv-empty-state').style.display   = 'none';
+    document.getElementById('csv-status').textContent = '';
+}
+
+// ── Analysis ─────────────────────────────────────────────────────────────────
+async function runCsvAnalysis() {
+    if (!_csvFile) return;
+    const btn = document.getElementById('csv-analyze-btn');
+    btn.disabled = true;
+    document.getElementById('csv-status').textContent = 'Uploading…';
+
+    // Show animated progress bar
+    const progWrap = document.getElementById('csv-progress-wrap');
+    const progBar  = document.getElementById('csv-progress-bar');
+    const progLbl  = document.getElementById('csv-progress-label');
+    progWrap.style.display = '';
+    progBar.style.width    = '15%';
+    progLbl.textContent    = 'Uploading file…';
+
+    // Hide previous results
+    document.getElementById('csv-summary-ribbon').style.display = 'none';
+    document.getElementById('csv-results-wrap').style.display   = 'none';
+    document.getElementById('csv-empty-state').style.display    = 'none';
+
+    const fd = new FormData();
+    fd.append('file', _csvFile);
+
+    // Fake progress ticks while waiting for server
+    let fakeProgress = 15;
+    const tick = setInterval(() => {
+        fakeProgress = Math.min(fakeProgress + (90 - fakeProgress) * 0.15, 88);
+        progBar.style.width    = fakeProgress + '%';
+        progLbl.textContent    = fakeProgress < 50 ? 'Uploading file…'
+                               : fakeProgress < 75 ? 'Running detection patterns…'
+                               : 'Scoring anomalies…';
+    }, 300);
+
+    const t0 = performance.now();
+    try {
+        const res  = await fetch('/api/analyze-csv', { method:'POST', body: fd });
+        clearInterval(tick);
+
+        progBar.style.width = '100%';
+        progLbl.textContent = 'Done.';
+
+        const data = await res.json();
+        const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
+
+        if (!res.ok) {
+            document.getElementById('csv-status').textContent = '⚠ ' + (data.error || 'Server error');
+            progWrap.style.display = 'none';
+            btn.disabled = false;
+            return;
+        }
+        _csvResults = data;
+        _csvResults._elapsed = elapsed;
+        document.getElementById('csv-status').textContent = `✓ Completed in ${elapsed}s`;
+        setTimeout(() => { progWrap.style.display = 'none'; }, 600);
+        renderCsvResults(data, elapsed);
+    } catch(err) {
+        clearInterval(tick);
+        progWrap.style.display = 'none';
+        document.getElementById('csv-status').textContent = '⚠ Network error – is the server running?';
+        btn.disabled = false;
+    }
+}
+
+
+// ── Grouping ──────────────────────────────────────────────────────────────────
+// Group flat anomaly list by person (Aadhaar → name → row_index as fallback).
+// Returns an array of person objects sorted by max risk score desc.
+function groupAnomalies(anomalies) {
+    const map = new Map();
+    for (const a of anomalies) {
+        const key = (a.aadhaar && a.aadhaar !== '—') ? a.aadhaar
+                  : (a.name    && a.name    !== '—') ? '__name__' + a.name
+                  : '__row__' + a.row_index;
+
+        if (!map.has(key)) {
+            map.set(key, {
+                key,
+                name:         a.name,
+                aadhaar:      a.aadhaar,
+                district:     a.district,
+                risk_score:   a.risk_score,
+                anomaly_types: [],       // distinct types
+                evidences:    [],        // one per type
+                row_indices:  [],
+            });
+        }
+        const p = map.get(key);
+        p.risk_score = Math.max(p.risk_score, a.risk_score);
+        if (!p.anomaly_types.includes(a.anomaly_type)) {
+            p.anomaly_types.push(a.anomaly_type);
+            p.evidences.push({ type: a.anomaly_type, text: a.evidence });
+        }
+        p.row_indices.push(a.row_index);
+    }
+    return [...map.values()].sort((a, b) => b.risk_score - a.risk_score);
+}
+
+// ── Render ────────────────────────────────────────────────────────────────────
+function renderCsvResults(data, elapsed) {
+    const btn = document.getElementById('csv-analyze-btn');
+    btn.disabled = false;
+
+    const { total_rows, total_rows_original, trimmed, anomalies, summary, patterns_run, errors } = data;
+
+    // Build grouped persons list and store on results
+    const grouped = groupAnomalies(anomalies);
+    _csvResults._grouped = grouped;
+
+    // Per-type unique person counts (for filter chips)
+    const typePersonCount = {};
+    for (const p of grouped) {
+        for (const t of p.anomaly_types) {
+            typePersonCount[t] = (typePersonCount[t] || 0) + 1;
+        }
+    }
+
+    // ── Summary ribbon ───────────────────────────────────────────────────────
+    const ribbon    = document.getElementById('csv-summary-ribbon');
+    ribbon.style.display = '';
+    const typeOrder = ['DECEASED','DUPLICATE_IDENTITY','UNDRAWN_FUNDS','CROSS_SCHEME'];
+
+    let ribbonHtml = `<div class="csv-ribbon">
+        <div class="csv-ribbon-stat">
+            <div class="rv" style="color:#6366f1">${(total_rows_original || total_rows).toLocaleString()}</div>
+            <div class="rl">Rows in File</div>
+        </div>
+        <div class="csv-ribbon-stat">
+            <div class="rv" style="color:#94a3b8">${total_rows.toLocaleString()}</div>
+            <div class="rl">Rows Scanned</div>
+        </div>
+        <div class="csv-ribbon-stat">
+            <div class="rv" style="color:${grouped.length ? '#ef4444' : '#10b981'}">${grouped.length.toLocaleString()}</div>
+            <div class="rl">Flagged Persons</div>
+        </div>
+        <div class="csv-ribbon-stat">
+            <div class="rv" style="color:#6366f1;font-size:1.2rem">${elapsed || '—'}s</div>
+            <div class="rl">Analysis Time</div>
+        </div>`;
+
+    for (const t of typeOrder) {
+        const c   = typePersonCount[t] || 0;
+        const col = TYPE_COLORS[t] || {text:'#94a3b8'};
+        ribbonHtml += `<div class="csv-ribbon-stat">
+            <div class="rv" style="color:${col.text}">${c}</div>
+            <div class="rl">${(TYPE_LABELS[t]||t)}</div>
+        </div>`;
+    }
+    ribbonHtml += '</div>';
+
+    if (patterns_run && patterns_run.length) {
+        ribbonHtml += `<p style="font-size:0.72rem;color:var(--text-muted);margin-top:0.6rem;">
+            Patterns run: ${patterns_run.map(p=>'<strong>'+p+'</strong>').join(', ')}
+        </p>`;
+    }
+    if (errors && errors.length) {
+        ribbonHtml += errors.map(e =>
+            `<div style="margin-top:0.5rem;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);border-radius:8px;padding:0.5rem 0.75rem;font-size:0.78rem;color:#fcd34d;">
+                <i class="ph ph-warning"></i> ${escHtml(e)}
+            </div>`
+        ).join('');
+    }
+    ribbon.innerHTML = ribbonHtml;
+
+    if (!grouped.length) {
+        const emptyEl = document.getElementById('csv-empty-state');
+        emptyEl.innerHTML = `
+            <i class="ph ph-check-circle" style="font-size:2.5rem;color:#10b981;display:block;margin-bottom:0.5rem;"></i>
+            <p style="font-weight:600;font-size:1rem;margin:0;">No anomalies detected</p>
+            <p style="font-size:0.82rem;margin-top:0.25rem;color:var(--text-muted);">
+                ${total_rows.toLocaleString()} rows were scanned and all appear clean under the current thresholds.
+            </p>`;
+        emptyEl.style.display = '';
+        document.getElementById('csv-results-wrap').style.display = 'none';
+        return;
+    }
+
+    // ── Filter chips ─────────────────────────────────────────────────────────
+    const filterDiv = document.getElementById('csv-filter-chips');
+    let filterHtml  = `<button class="filter-chip active" data-type="ALL"
+        style="background:rgba(99,102,241,0.12);border-color:rgba(99,102,241,0.35);color:#a5b4fc"
+        onclick="applyFilter('ALL',this)">All Persons (${grouped.length})</button>`;
+    for (const t of typeOrder) {
+        const cnt = typePersonCount[t];
+        if (!cnt) continue;
+        const c = TYPE_COLORS[t];
+        filterHtml += `<button class="filter-chip active" data-type="${t}"
+            style="background:${c.bg};border-color:${c.border};color:${c.text}"
+            onclick="applyFilter('${t}',this)">${TYPE_LABELS[t]} (${cnt})</button>`;
+    }
+    filterDiv.innerHTML = filterHtml;
+
+    document.getElementById('csv-results-title').textContent =
+        `${grouped.length} flagged ${grouped.length === 1 ? 'person' : 'persons'} · ${anomalies.length} total anomaly flags across ${total_rows.toLocaleString()} rows`;
+    document.getElementById('csv-results-wrap').style.display = '';
+    renderTableRows(grouped);
+}
+
+// ── Per-person import state ───────────────────────────────────────────────────
+const _importedKeys = new Set();
+
+// ── Table rendering ───────────────────────────────────────────────────────────
+function renderTableRows(grouped) {
+    const tbody  = document.getElementById('csv-results-tbody');
+    const filter = _activeFilter;
+    const visible = filter === 'ALL'
+        ? grouped
+        : grouped.filter(p => p.anomaly_types.includes(filter));
+
+    if (!visible.length) {
+        tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted p-3">No persons match this filter.</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = visible.map((p, idx) => {
+        const rc = riskColor(p.risk_score);
+
+        const typeBadges = p.anomaly_types.map(t => {
+            const tc = TYPE_COLORS[t] || {bg:'rgba(99,102,241,0.1)',border:'rgba(99,102,241,0.3)',text:'#a5b4fc'};
+            return `<span class="risk-badge" style="background:${tc.bg};border:1px solid ${tc.border};color:${tc.text};margin-right:3px;">${TYPE_LABELS[t]||t}</span>`;
+        }).join('');
+
+        const evFull  = p.evidences.map(e => `[${e.type}] ${e.text}`).join('\n\n');
+        const evFirst = p.evidences[0]?.text || '';
+        const evShort = evFirst.length > 80 ? evFirst.substring(0,80)+'…' : evFirst;
+        const extraCount = p.evidences.length > 1
+            ? ` <span style="color:var(--text-muted);font-size:0.7rem;">(+${p.evidences.length-1} more)</span>` : '';
+
+        const rowLabel = p.row_indices.length === 1
+            ? `#${p.row_indices[0]}`
+            : `#${p.row_indices[0]} <span style="color:var(--text-muted);font-size:0.7rem;">+${p.row_indices.length-1}</span>`;
+
+        const alreadyImported = _importedKeys.has(p.key);
+        const actionCell = alreadyImported
+            ? `<span style="color:#10b981;font-size:0.78rem;font-weight:600;">
+                   <i class="ph ph-check-circle"></i> Queued
+               </span>`
+            : `<button class="btn btn-primary" style="font-size:0.72rem;padding:0.25rem 0.65rem;"
+                   onclick="importPersonToQueue(${idx}, this)">
+                   <i class="ph ph-arrow-square-up"></i> Investigate
+               </button>`;
+
+        return `<tr data-person-idx="${idx}">
+            <td><span style="font-family:monospace;color:var(--text-muted)">${rowLabel}</span></td>
+            <td style="font-weight:600">${escHtml(p.name)}</td>
+            <td style="font-family:monospace;font-size:0.8rem">${escHtml(p.aadhaar)}</td>
+            <td>${escHtml(p.district || '—')}</td>
+            <td style="white-space:nowrap">${typeBadges}</td>
+            <td>
+                <span class="risk-badge" style="background:${rc}22;border:1px solid ${rc}55;color:${rc};font-size:0.78rem">
+                    ${p.risk_score}
+                </span>
+            </td>
+            <td style="font-size:0.78rem;color:var(--text-muted);max-width:200px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis"
+                title="${escHtml(evFull)}">${escHtml(evShort)}${extraCount}</td>
+            <td>${actionCell}</td>
+        </tr>`;
+    }).join('');
+}
+
+function applyFilter(type, el) {
+    _activeFilter = type;
+    document.querySelectorAll('.filter-chip').forEach(c => {
+        c.classList.toggle('active', c.dataset.type === type || type === 'ALL');
+    });
+    if (_csvResults && _csvResults._grouped) renderTableRows(_csvResults._grouped);
+}
+
+// ── Import helpers ────────────────────────────────────────────────────────────
+async function _callImport(persons) {
+    const res  = await fetch('/api/import-csv-persons', {
+        method:  'POST',
+        headers: {'Content-Type': 'application/json'},
+        body:    JSON.stringify({ persons }),
+    });
+    return res.json();
+}
+
+// Write imported persons into localStorage so the verifier page sees them.
+// Mirrors exactly what assignCase() in main.js does.
+function _pushToVerifierQueue(persons, alertIds) {
+    let queue = [];
+    try { queue = JSON.parse(localStorage.getItem('assignedAlerts') || '[]'); } catch(e) {}
+
+    persons.forEach((p, i) => {
+        const alertId = (alertIds && alertIds[i]) ?? null;
+        if (alertId === null) return;
+        if (queue.find(c => c.id === alertId)) return;  // dedup
+        queue.push({
+            id:          alertId,
+            name:        p.name,
+            district:    p.district || '',
+            leakageType: p.anomaly_types[0] || 'ALERT',
+            evidence:    p.evidences.map(e => `[${e.type}] ${e.text}`).join(' | '),
+        });
+    });
+
+    localStorage.setItem('assignedAlerts', JSON.stringify(queue));
+}
+
+// Per-row "Investigate" button handler
+async function importPersonToQueue(idx, btnEl) {
+    const grouped = _csvResults?._grouped;
+    if (!grouped) return;
+
+    const filter  = _activeFilter;
+    const visible = filter === 'ALL' ? grouped : grouped.filter(p => p.anomaly_types.includes(filter));
+    const p       = visible[idx];
+    if (!p) return;
+
+    btnEl.disabled   = true;
+    btnEl.textContent = '…';
+
+    try {
+        const data = await _callImport([p]);
+        if (data.error) { showToast('⚠ ' + data.error, 'warn'); btnEl.disabled = false; btnEl.innerHTML = '<i class="ph ph-arrow-square-up"></i> Investigate'; return; }
+
+        _importedKeys.add(p.key);
+        // Update just this cell without re-rendering the whole table
+        const cell = btnEl.closest('td');
+        cell.innerHTML = `<span style="color:#10b981;font-size:0.78rem;font-weight:600;"><i class="ph ph-check-circle"></i> Queued</span>`;
+
+        // Push to localStorage so the verifier page sees it immediately
+        _pushToVerifierQueue([p], data.alert_ids || []);
+
+        showToast(`✓ ${escHtml(p.name)} added to Investigation Queue`, 'success');
+        if (typeof fetchAlerts === 'function') fetchAlerts();
+    } catch(e) {
+        showToast('⚠ Network error during import', 'warn');
+        btnEl.disabled = false;
+        btnEl.innerHTML = '<i class="ph ph-arrow-square-up"></i> Investigate';
+    }
+}
+
+// Bulk "Import All to Queue" button handler
+async function importAllToQueue() {
+    const grouped = _csvResults?._grouped;
+    if (!grouped || !grouped.length) return;
+
+    const pending = grouped.filter(p => !_importedKeys.has(p.key));
+    if (!pending.length) { showToast('All persons already in queue.', 'info'); return; }
+
+    const btn = document.getElementById('csv-import-all-btn');
+    if (btn) { btn.disabled = true; btn.textContent = `Importing ${pending.length}…`; }
+
+    try {
+        const data = await _callImport(pending);
+        if (data.error) { showToast('⚠ ' + data.error, 'warn'); if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ph ph-arrow-square-up"></i> Import All to Queue'; } return; }
+
+        // Mark all as imported
+        pending.forEach(p => _importedKeys.add(p.key));
+        renderTableRows(grouped);   // re-render so all buttons become "Queued"
+
+        // Push all imported persons to localStorage for the verifier page
+        _pushToVerifierQueue(pending, data.alert_ids || []);
+
+        showToast(`✓ ${data.imported} person(s) added to Investigation Queue`, 'success');
+        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ph ph-check-circle"></i> All Queued'; }
+        if (typeof fetchAlerts === 'function') fetchAlerts();
+    } catch(e) {
+        showToast('⚠ Network error during bulk import', 'warn');
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ph ph-arrow-square-up"></i> Import All to Queue'; }
+    }
+}
+
+// ── Toast notification ────────────────────────────────────────────────────────
+(function initToastContainer() {
+    if (document.getElementById('csv-toast-container')) return;
+    const el = document.createElement('div');
+    el.id = 'csv-toast-container';
+    el.style.cssText = 'position:fixed;bottom:1.5rem;right:1.5rem;z-index:9999;display:flex;flex-direction:column;gap:0.5rem;pointer-events:none;';
+    document.body.appendChild(el);
+})();
+
+function showToast(msg, type='success') {
+    const colors = {
+        success: {bg:'rgba(16,185,129,0.15)',border:'rgba(16,185,129,0.4)',text:'#6ee7b7'},
+        warn:    {bg:'rgba(245,158,11,0.15)',border:'rgba(245,158,11,0.4)',text:'#fcd34d'},
+        info:    {bg:'rgba(99,102,241,0.15)',border:'rgba(99,102,241,0.4)',text:'#a5b4fc'},
+    };
+    const c = colors[type] || colors.success;
+    const el = document.createElement('div');
+    el.style.cssText = `
+        background:${c.bg};border:1px solid ${c.border};color:${c.text};
+        padding:0.6rem 1rem;border-radius:10px;font-size:0.82rem;font-weight:500;
+        backdrop-filter:blur(8px);pointer-events:auto;
+        animation:toastIn 0.25s ease;max-width:320px;line-height:1.4;
+    `;
+    el.innerHTML = msg;
+    const container = document.getElementById('csv-toast-container');
+    container.appendChild(el);
+    setTimeout(() => {
+        el.style.opacity = '0';
+        el.style.transition = 'opacity 0.3s';
+        setTimeout(() => el.remove(), 320);
+    }, 4000);
+}
+
+// ── Export CSV (grouped) ──────────────────────────────────────────────────────
+function downloadCsvResults() {
+    if (!_csvResults || !_csvResults._grouped || !_csvResults._grouped.length) return;
+    const rows = [['Row(s)','Name','Aadhaar','District','Anomaly Types','Max Risk Score','Evidence','Queued']];
+    for (const p of _csvResults._grouped) {
+        rows.push([
+            p.row_indices.join('; '),
+            p.name,
+            p.aadhaar,
+            p.district || '',
+            p.anomaly_types.join('; '),
+            p.risk_score,
+            p.evidences.map(e => `[${e.type}] ${e.text}`).join(' | '),
+            _importedKeys.has(p.key) ? 'Yes' : 'No',
+        ]);
+    }
+    const csv = rows.map(r => r.map(v => '"' + String(v).replace(/"/g,'""') + '"').join(',')).join('\n');
+    const blob = new Blob([csv], {type:'text/csv'});
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = `anomalies_grouped_${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+function escHtml(s) {
+    return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+
+<style>
+@keyframes toastIn {
+    from { opacity:0; transform:translateY(12px); }
+    to   { opacity:1; transform:translateY(0); }
+}
+</style>
+
+{% endblock %}
+{% endblock %}

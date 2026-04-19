@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>Verifier Field Portal</h1>
+        <p class="subtitle">Assigned cases awaiting GPS verification.</p>
+    </div>
+</div>
+
+<div class="card mt-2 mobile-container">
+    <h3>My Assigned Cases</h3>
+    <div id="assigned-cases">
+        <p class="text-muted p-2">Loading assigned cases…</p>
+    </div>
+</div>
+
+<div class="modal" id="verify-modal">
+    <div class="modal-content mobile-modal-content">
+        <div class="modal-header">
+            <h3>Field Verification</h3>
+            <button class="close-btn" onclick="document.getElementById('verify-modal').classList.remove('active')">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="gps-status" id="gps-status">
+                <i class="ph ph-spinner ph-spin"></i> Fetching GPS Coordinates...
+            </div>
+            <p class="text-xs text-muted mt-1">Location: <span id="lat-long"></span></p>
+            
+            <div class="form-group mt-2">
+                <label>Verification Result</label>
+                <select class="form-control" id="verify-status">
+                    <option value="VERIFIED">Verified - Leakage Confirmed</option>
+                    <option value="FALSE_POSITIVE">False Positive - All Correct</option>
+                </select>
+            </div>
+            
+            <div class="form-group mt-2">
+                <label>Field Comments / Evidence</label>
+                <textarea class="form-control" rows="3" id="verify-comments" placeholder="E.g. Met beneficiary, Aadhaar mismatch confirmed..."></textarea>
+            </div>
+        </div>
+        <div class="modal-footer mt-2">
+            <button class="btn w-full btn-primary" onclick="submitVerification()">Submit Report</button>
+        </div>
+    </div>
+</div>
+{% endblock %}

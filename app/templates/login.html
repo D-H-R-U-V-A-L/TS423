@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DBT Sentinel | Sign In</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <style>
+        :root {
+            --bg: #0f172a;
+            --surface: #1e293b;
+            --surface-light: #334155;
+            --accent: #3b82f6;
+            --accent-glow: rgba(59,130,246,0.35);
+            --danger: #ef4444;
+            --text: #f8fafc;
+            --muted: #94a3b8;
+            --border: rgba(255,255,255,0.1);
+            --radius: 14px;
+        }
+
+        * { margin:0; padding:0; box-sizing:border-box; font-family:'Inter',sans-serif; }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        /* Animated background blobs */
+        .bg-blobs {
+            position: fixed; inset: 0; pointer-events: none; z-index: 0;
+        }
+        .blob {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(120px);
+            opacity: 0.2;
+            animation: drift 14s ease-in-out infinite alternate;
+        }
+        .blob-1 { width:500px; height:500px; background:#3b82f6; top:-150px; left:-100px; animation-delay:0s; }
+        .blob-2 { width:400px; height:400px; background:#8b5cf6; bottom:-100px; right:-80px; animation-delay:3s; }
+        .blob-3 { width:300px; height:300px; background:#06b6d4; top:50%; left:55%; animation-delay:6s; }
+
+        @keyframes drift {
+            from { transform: translate(0,0) scale(1); }
+            to   { transform: translate(40px,30px) scale(1.08); }
+        }
+
+        /* Card */
+        .login-wrap {
+            position: relative; z-index: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            padding: 1rem;
+        }
+
+        .card {
+            background: rgba(30,41,59,0.75);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 2.5rem 2.25rem;
+            width: 100%;
+            max-width: 420px;
+            box-shadow: 0 25px 60px rgba(0,0,0,0.4);
+            animation: slideUp 0.5s ease both;
+        }
+
+        @keyframes slideUp {
+            from { opacity:0; transform:translateY(30px); }
+            to   { opacity:1; transform:translateY(0); }
+        }
+
+        /* Brand */
+        .brand {
+            display: flex; align-items: center; gap:0.75rem;
+            justify-content: center;
+            margin-bottom: 0.5rem;
+        }
+        .brand i { font-size: 2rem; color: var(--accent); }
+        .brand h1 { font-size: 1.6rem; font-weight:700; letter-spacing:-0.02em; }
+
+        .tagline {
+            text-align: center;
+            color: var(--muted);
+            font-size: 0.875rem;
+            margin-bottom: 2rem;
+        }
+
+        /* Role pills */
+        .roles-hint {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            justify-content: center;
+            margin-bottom: 2rem;
+        }
+
+        .role-pill {
+            background: rgba(59,130,246,0.12);
+            border: 1px solid rgba(59,130,246,0.25);
+            border-radius: 999px;
+            padding: 0.3rem 0.75rem;
+            font-size: 0.7rem;
+            font-weight: 600;
+            color: #93c5fd;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+
+        /* Error alert */
+        .alert-error {
+            background: rgba(239,68,68,0.12);
+            border: 1px solid rgba(239,68,68,0.35);
+            border-radius: 10px;
+            padding: 0.75rem 1rem;
+            font-size: 0.875rem;
+            color: #fca5a5;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 1.25rem;
+        }
+
+        /* Form */
+        .form-group {
+            margin-bottom: 1.25rem;
+        }
+        label {
+            display: block;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.5rem;
+        }
+        .input-wrap {
+            position: relative;
+        }
+        .input-wrap i {
+            position: absolute;
+            left: 0.9rem;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--muted);
+            font-size: 1.1rem;
+            pointer-events: none;
+        }
+        input[type="text"], input[type="password"] {
+            width: 100%;
+            background: var(--surface-light);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 0.8rem 1rem 0.8rem 2.75rem;
+            color: var(--text);
+            font-size: 0.9375rem;
+            font-family: inherit;
+            transition: border-color 0.25s, box-shadow 0.25s;
+            outline: none;
+        }
+        input:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-glow);
+        }
+
+        .btn-login {
+            width: 100%;
+            padding: 0.85rem;
+            background: var(--accent);
+            color: #fff;
+            border: none;
+            border-radius: 10px;
+            font-size: 0.9375rem;
+            font-weight: 700;
+            cursor: pointer;
+            letter-spacing: 0.02em;
+            box-shadow: 0 6px 20px rgba(59,130,246,0.35);
+            transition: background 0.25s, transform 0.2s, box-shadow 0.25s;
+            margin-top: 0.5rem;
+        }
+        .btn-login:hover {
+            background: #2563eb;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 28px rgba(59,130,246,0.5);
+        }
+        .btn-login:active { transform: translateY(0); }
+
+        /* Demo creds table */
+        .demo-creds {
+            margin-top: 2rem;
+            border-top: 1px solid var(--border);
+            padding-top: 1.25rem;
+        }
+        .demo-creds p {
+            text-align: center;
+            font-size: 0.75rem;
+            color: var(--muted);
+            margin-bottom: 0.75rem;
+        }
+        .creds-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.78rem;
+        }
+        .creds-table th {
+            color: var(--muted);
+            text-align: left;
+            padding: 0.3rem 0.5rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            border-bottom: 1px solid var(--border);
+        }
+        .creds-table td {
+            padding: 0.35rem 0.5rem;
+            color: #cbd5e1;
+        }
+        .creds-table tr:hover td { background: rgba(255,255,255,0.03); }
+        .pill-role {
+            background: rgba(139,92,246,0.15);
+            color: #c4b5fd;
+            border-radius: 4px;
+            padding: 0.15rem 0.4rem;
+            font-size: 0.7rem;
+            font-weight: 600;
+        }
+        code {
+            font-family: 'Courier New', monospace;
+            background: rgba(255,255,255,0.07);
+            border-radius: 4px;
+            padding: 0.1rem 0.3rem;
+            font-size: 0.8rem;
+        }
+
+        /* Quick-fill buttons */
+        .quick-fill {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.4rem;
+            justify-content: center;
+            margin-top: 0.75rem;
+        }
+        .qf-btn {
+            background: rgba(51,65,85,0.8);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 0.3rem 0.6rem;
+            font-size: 0.7rem;
+            font-weight: 600;
+            color: var(--muted);
+            cursor: pointer;
+            transition: background 0.2s, color 0.2s;
+        }
+        .qf-btn:hover { background: var(--accent); color:#fff; border-color:var(--accent); }
+    </style>
+</head>
+<body>
+    <div class="bg-blobs">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+        <div class="blob blob-3"></div>
+    </div>
+
+    <div class="login-wrap">
+        <div class="card">
+            <div class="brand">
+                <i class="ph-fill ph-shield-check"></i>
+                <h1>DBT Sentinel</h1>
+            </div>
+            <p class="tagline">Gujarat Welfare Leakage Detection System</p>
+
+            <div class="roles-hint">
+                <span class="role-pill">DFO</span>
+                <span class="role-pill">Field Verifier</span>
+                <span class="role-pill">State Admin</span>
+                <span class="role-pill">Audit Team</span>
+            </div>
+
+            {% if error %}
+            <div class="alert-error">
+                <i class="ph ph-warning-circle"></i>
+                {{ error }}
+            </div>
+            {% endif %}
+
+            <form method="POST" action="/login" id="login-form">
+                <div class="form-group">
+                    <label for="username">Username</label>
+                    <div class="input-wrap">
+                        <i class="ph ph-user"></i>
+                        <input type="text" id="username" name="username"
+                               placeholder="Enter your username" autocomplete="username">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <div class="input-wrap">
+                        <i class="ph ph-lock"></i>
+                        <input type="password" id="password" name="password"
+                               placeholder="Enter your password" autocomplete="current-password">
+                    </div>
+                </div>
+
+                <button type="submit" class="btn-login">
+                    Sign In &rarr;
+                </button>
+            </form>
+
+            <!-- Demo credentials helper -->
+            <div class="demo-creds">
+                <p>Demo credentials — click to fill:</p>
+                <div class="quick-fill">
+                    <button class="qf-btn" onclick="fill('dfo_officer','dfo123')">DFO Officer</button>
+                    <button class="qf-btn" onclick="fill('field_verifier','verify123')">Verifier</button>
+                    <button class="qf-btn" onclick="fill('state_admin','admin123')">State Admin</button>
+                    <button class="qf-btn" onclick="fill('audit_user','audit123')">Audit</button>
+                </div>
+                <table class="creds-table" style="margin-top:0.75rem;">
+                    <thead>
+                        <tr>
+                            <th>Username</th>
+                            <th>Password</th>
+                            <th>Role</th>
+                            <th>Portal</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>dfo_officer</code></td>
+                            <td><code>dfo123</code></td>
+                            <td><span class="pill-role">DFO</span></td>
+                            <td>/</td>
+                        </tr>
+                        <tr>
+                            <td><code>field_verifier</code></td>
+                            <td><code>verify123</code></td>
+                            <td><span class="pill-role">Verifier</span></td>
+                            <td>/verifier</td>
+                        </tr>
+                        <tr>
+                            <td><code>state_admin</code></td>
+                            <td><code>admin123</code></td>
+                            <td><span class="pill-role">Admin</span></td>
+                            <td>/heatmap</td>
+                        </tr>
+                        <tr>
+                            <td><code>audit_user</code></td>
+                            <td><code>audit123</code></td>
+                            <td><span class="pill-role">Audit</span></td>
+                            <td>/audit</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function fill(u, p) {
+            document.getElementById('username').value = u;
+            document.getElementById('password').value = p;
+            document.getElementById('username').focus();
+        }
+    </script>
+</body>
+</html>
